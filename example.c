@@ -19,7 +19,7 @@ int main(){
 	/* Allocate memory region in heap memory */
 	uint8_t *first_data_ptr = NULL;
 	uint32_t first_allocation_size = 8;
-	dalloc(&heap, first_allocation_size, &first_data_ptr);
+	dalloc(&heap, first_allocation_size, (void**)&first_data_ptr);
 
 	/* Check if allocation is successful */
 	if(first_data_ptr == NULL){
@@ -46,7 +46,7 @@ int main(){
 	/* Reallocate first memory region */
 	printf("Reallocate first memory region\n");
 	uint32_t new_size_for_first_allocation = 11;
-	if(drealloc(&heap, new_size_for_first_allocation, &first_data_ptr) != true){
+	if(drealloc(&heap, new_size_for_first_allocation, (void**)&first_data_ptr) != true){
 		printf("Memory reallocation error, can't allocate %u bytes\n", new_size_for_first_allocation);
 	}
 
@@ -60,7 +60,7 @@ int main(){
 	/* Allocate second memory region in heap memory */
 	uint8_t *second_data_ptr = NULL;
 	uint32_t second_allocation_size = 5;
-	dalloc(&heap, second_allocation_size, &second_data_ptr);
+	dalloc(&heap, second_allocation_size, (void**)&second_data_ptr);
 
 	/* Check if allocation is successful */
 	if(second_data_ptr == NULL){
@@ -86,7 +86,7 @@ int main(){
 
 	/* Free first memory region */
 	printf("Free first memory region\n");
-	dfree(&heap, &first_data_ptr, USING_PTR_ADDRESS);
+	dfree(&heap, (void**)&first_data_ptr, USING_PTR_ADDRESS);
 
 	/* Print info about all allocations in given heap memory */
 	print_dalloc_info(&heap);
@@ -95,7 +95,7 @@ int main(){
 
 	/* Free second memory region */
 	printf("Free second memory region\n");
-	dfree(&heap, &second_data_ptr, USING_PTR_ADDRESS);
+	dfree(&heap, (void**)&second_data_ptr, USING_PTR_ADDRESS);
 
 	/* Print info about all allocations in given heap memory */
 	print_dalloc_info(&heap);

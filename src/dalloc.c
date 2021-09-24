@@ -56,7 +56,6 @@ void dalloc(heap_t* heap_struct_ptr, uint32_t size, void **ptr){
 }
 
 bool validate_ptr(heap_t* heap_struct_ptr, void **ptr, validate_ptr_condition_t condition, uint32_t *ptr_index){
-	dalloc_debug("Validate ptr with address 0x%08lX\n", (uint32_t)ptr);
     for(uint32_t i = 0; i < heap_struct_ptr->alloc_info.allocations_num; i++){
     	if(condition == USING_PTR_ADDRESS){
     		if(heap_struct_ptr->alloc_info.ptr_info_arr[i].ptr == (uint8_t**)ptr){
@@ -71,7 +70,6 @@ bool validate_ptr(heap_t* heap_struct_ptr, void **ptr, validate_ptr_condition_t 
 			}
     	}
     }
-    dalloc_debug("There is no ptr with address 0x%08lX\n", (uint32_t)ptr);
     return false;
 }
 
@@ -179,7 +177,7 @@ void dump_heap(heap_t* heap_struct_ptr){
 void dump_dalloc_ptr_info(heap_t* heap_struct_ptr){
 	dalloc_debug("\n***************************** Ptr Info *****************************\n");
 	for(uint32_t i = 0; i < heap_struct_ptr->alloc_info.allocations_num; i++){
-		dalloc_debug("Ptr address: 0x%08lX, ptr first val: 0x%02lX, alloc size: %lu\n", (uint32_t)(heap_struct_ptr->alloc_info.ptr_info_arr[i].ptr), (uint8_t)(**heap_struct_ptr->alloc_info.ptr_info_arr[i].ptr), heap_struct_ptr->alloc_info.ptr_info_arr[i].allocated_size);
+		dalloc_debug("Ptr address: 0x%08lX, ptr first val: 0x%02X, alloc size: %lu\n", (uint32_t)(heap_struct_ptr->alloc_info.ptr_info_arr[i].ptr), (uint8_t)(**heap_struct_ptr->alloc_info.ptr_info_arr[i].ptr), heap_struct_ptr->alloc_info.ptr_info_arr[i].allocated_size);
 	}
 	dalloc_debug("\n********************************************************************\n\n");
 }
