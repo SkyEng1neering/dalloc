@@ -18,7 +18,7 @@
 #define DALLOCTYPES_H
 
 #ifdef __cplusplus
- extern "C" {
+    extern "C" {
 #endif
 
 #include "stdint.h"
@@ -26,25 +26,25 @@
 #include "stdio.h"
 #include "string.h"
 
-#define DALLOC_VERSION					"1.1.0"
+#define DALLOC_VERSION                      "1.1.1"
 
-#define FILL_FREED_MEMORY_BY_NULLS		false
-#define dalloc_debug					printf
-#define MAX_NUM_OF_ALLOCATIONS       	100UL
+#define FILL_FREED_MEMORY_BY_NULLS          false
+#define dalloc_debug                        printf
+#define MAX_NUM_OF_ALLOCATIONS              100UL
 #define USE_ALIGNMENT
 
 #ifdef USE_ALIGNMENT
-#define ALLOCATION_ALIGNMENT_BYTES    	4U
+#define ALLOCATION_ALIGNMENT_BYTES          4U
 #endif
 
 typedef enum {
-	DALLOC_OK = 0,
-	DALLOC_ERR
+    DALLOC_OK = 0,
+    DALLOC_ERR
 } dalloc_stat_t;
 
 typedef enum {
-	USING_PTR_ADDRESS = 0,
-	USING_PTR_VALUE
+    USING_PTR_ADDRESS = 0,
+    USING_PTR_VALUE
 } validate_ptr_condition_t;
 
 typedef struct {
@@ -67,7 +67,7 @@ typedef struct {
 } heap_t;
 
 #ifdef __cplusplus
- }
+    }
 #endif
 
 #endif // DALLOCTYPES_H
