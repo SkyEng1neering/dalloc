@@ -50,7 +50,7 @@ void dalloc(heap_t* heap_struct_ptr, uint32_t size, void **ptr){
         	dalloc_debug("dalloc: Heap size exceeded\n");
         }
         if(heap_struct_ptr->alloc_info.allocations_num > MAX_NUM_OF_ALLOCATIONS){
-        	dalloc_debug("dalloc: Max number of allocations exceeded: %lu\n", heap_struct_ptr->alloc_info.allocations_num);
+        	dalloc_debug("dalloc: Max number of allocations exceeded: %lu\n", (long unsigned int)heap_struct_ptr->alloc_info.allocations_num);
         }
     }
 }
@@ -59,13 +59,17 @@ bool validate_ptr(heap_t* heap_struct_ptr, void **ptr, validate_ptr_condition_t 
     for(uint32_t i = 0; i < heap_struct_ptr->alloc_info.allocations_num; i++){
     	if(condition == USING_PTR_ADDRESS){
     		if(heap_struct_ptr->alloc_info.ptr_info_arr[i].ptr == (uint8_t**)ptr){
-    			*ptr_index = i;
+    			if(ptr_index != NULL){
+    				*ptr_index = i;
+    			}
     			return true;
 			}
     	}
     	else {
     		if(*(heap_struct_ptr->alloc_info.ptr_info_arr[i].ptr) == *ptr){
-    			*ptr_index = i;
+    			if(ptr_index != NULL){
+    				*ptr_index = i;
+    			}
 				return true;
 			}
     	}
@@ -106,7 +110,6 @@ void dfree(heap_t* heap_struct_ptr, void **ptr, validate_ptr_condition_t conditi
 		heap_struct_ptr->offset = heap_struct_ptr->offset - alloc_size;
 
 		/* Fill by 0 all freed memory */
-//		memset(&(heap_struct_ptr->mem[heap_struct_ptr->offset]), 0, heap_struct_ptr->total_size - heap_struct_ptr->offset);
 		if(FILL_FREED_MEMORY_BY_NULLS){
 			for(uint32_t i = 0; i < heap_struct_ptr->total_size - heap_struct_ptr->offset; i++){
 				heap_struct_ptr->mem[heap_struct_ptr->offset + i] = 0;
@@ -126,7 +129,7 @@ void dfree(heap_t* heap_struct_ptr, void **ptr, validate_ptr_condition_t conditi
 void replace_pointers(heap_t* heap_struct_ptr, void **ptr_to_replace, void **ptr_new){
     uint32_t ptr_ind = 0;
     if(validate_ptr(heap_struct_ptr, ptr_to_replace, USING_PTR_ADDRESS, &ptr_ind) != true){
-        printf("Can't replace pointers. No pointer found in buffer\n");
+        dalloc_debug("Can't replace pointers. No pointer found in buffer\n");
         return;
     }
     *ptr_new = *ptr_to_replace;
@@ -159,11 +162,11 @@ bool drealloc(heap_t* heap_struct_ptr, uint32_t size, void **ptr){
 
 void print_dalloc_info(heap_t* heap_struct_ptr){
 	dalloc_debug("\n***************************** Mem Info *****************************\n");
-	dalloc_debug("Total memory, bytes: %lu\n", heap_struct_ptr->total_size);
-	dalloc_debug("Memory in use, bytes: %lu\n", heap_struct_ptr->offset);
-	dalloc_debug("Number of allocations: %lu\n", heap_struct_ptr->alloc_info.allocations_num);
-	dalloc_debug("The biggest memory was in use: %lu\n", heap_struct_ptr->alloc_info.max_memory_amount);
-	dalloc_debug("Max allocations number: %lu\n", heap_struct_ptr->alloc_info.max_allocations_amount);
+	dalloc_debug("Total memory, bytes: %lu\n", (long unsigned int)heap_struct_ptr->total_size);
+	dalloc_debug("Memory in use, bytes: %lu\n", (long unsigned int)heap_struct_ptr->offset);
+	dalloc_debug("Number of allocations: %lu\n", (long unsigned int)heap_struct_ptr->alloc_info.allocations_num);
+	dalloc_debug("The biggest memory was in use: %lu\n", (long unsigned int)heap_struct_ptr->alloc_info.max_memory_amount);
+	dalloc_debug("Max allocations number: %lu\n", (long unsigned int)heap_struct_ptr->alloc_info.max_allocations_amount);
 	dalloc_debug("\n********************************************************************\n\n");
 }
 
@@ -177,7 +180,7 @@ void dump_heap(heap_t* heap_struct_ptr){
 void dump_dalloc_ptr_info(heap_t* heap_struct_ptr){
 	dalloc_debug("\n***************************** Ptr Info *****************************\n");
 	for(uint32_t i = 0; i < heap_struct_ptr->alloc_info.allocations_num; i++){
-		dalloc_debug("Ptr address: 0x%08lX, ptr first val: 0x%02X, alloc size: %lu\n", (uint32_t)(heap_struct_ptr->alloc_info.ptr_info_arr[i].ptr), (uint8_t)(**heap_struct_ptr->alloc_info.ptr_info_arr[i].ptr), heap_struct_ptr->alloc_info.ptr_info_arr[i].allocated_size);
+		dalloc_debug("Ptr address: 0x%08lX, ptr first val: 0x%02X, alloc size: %lu\n", (size_t)(heap_struct_ptr->alloc_info.ptr_info_arr[i].ptr), (uint8_t)(**heap_struct_ptr->alloc_info.ptr_info_arr[i].ptr), (long unsigned int)heap_struct_ptr->alloc_info.ptr_info_arr[i].allocated_size);
 	}
 	dalloc_debug("\n********************************************************************\n\n");
 }

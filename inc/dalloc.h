@@ -17,8 +17,6 @@ void dump_dalloc_ptr_info(heap_t* heap_struct_ptr);
 void dump_heap(heap_t* heap_struct_ptr);
 void replace_pointers(heap_t *heap_struct_ptr, void **ptr_to_replace, void **ptr_new);
 
-void memAllocTest();
-
 #ifdef __cplusplus
  }
 #endif
