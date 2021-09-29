@@ -112,4 +112,6 @@ SmartPointer<uint8_t> func_that_use_dalloc(heap_t *heap_ptr, uint32_t some_data_
   return ptr;
 }
 ```
-All memory moments here works automatically
+All memory moments here is managed automatically
+
+# The file is under editing...
