@@ -23,6 +23,20 @@
 
 #include "dalloc_types.h"
 
+
+#ifdef USE_SINGLE_HEAP_MEMORY
+extern heap_t default_heap;
+
+void def_dalloc(uint32_t size, void **ptr);
+void def_dfree(void **ptr);
+void def_replace_pointers(void **ptr_to_replace, void **ptr_new);
+bool def_drealloc(uint32_t size, void **ptr);
+void print_def_dalloc_info();
+void dump_def_heap();
+void dump_def_dalloc_ptr_info();
+#endif
+
+
 void heap_init(heap_t *heap_struct_ptr, void *mem_ptr, uint32_t mem_size);
 void dalloc(heap_t *heap_struct_ptr, uint32_t size, void **ptr);
 bool drealloc(heap_t *heap_struct_ptr, uint32_t size, void **ptr);

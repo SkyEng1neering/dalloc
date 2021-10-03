@@ -16,6 +16,40 @@
 
 #include "dalloc.h"
 
+#ifdef USE_SINGLE_HEAP_MEMORY
+uint8_t single_heap[SINGLE_HEAP_SIZE] = {0};
+heap_t default_heap;
+bool memory_init_flag = false;
+
+void def_dalloc(uint32_t size, void **ptr){
+	dalloc(&default_heap, size, ptr);
+}
+
+void def_dfree(void **ptr){
+	dfree(&default_heap, ptr, USING_PTR_ADDRESS);
+}
+
+void def_replace_pointers(void **ptr_to_replace, void **ptr_new){
+	replace_pointers(&default_heap, ptr_to_replace, ptr_new);
+}
+
+bool def_drealloc(uint32_t size, void **ptr){
+	return drealloc(&default_heap, size, ptr);
+}
+
+void print_def_dalloc_info(){
+	print_dalloc_info(&default_heap);
+}
+
+void dump_def_heap(){
+	dump_heap(&default_heap);
+}
+
+void dump_def_dalloc_ptr_info(){
+	dump_dalloc_ptr_info(&default_heap);
+}
+#endif
+
 void heap_init(heap_t* heap_struct_ptr, void *mem_ptr, uint32_t mem_size){//Init here mem structures
 	heap_struct_ptr->offset = 0;
 	heap_struct_ptr->mem = (uint8_t*)mem_ptr;
@@ -28,6 +62,13 @@ void heap_init(heap_t* heap_struct_ptr, void *mem_ptr, uint32_t mem_size){//Init
 }
 
 void dalloc(heap_t* heap_struct_ptr, uint32_t size, void **ptr){
+#ifdef USE_SINGLE_HEAP_MEMORY
+	if(memory_init_flag == false){
+		heap_init(&default_heap, single_heap, SINGLE_HEAP_SIZE);
+		memory_init_flag = true;
+	}
+#endif
+
 	if(!heap_struct_ptr || !size){
 		*ptr = NULL;
 	}
