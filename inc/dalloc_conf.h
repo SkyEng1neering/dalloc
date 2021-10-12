@@ -21,9 +21,9 @@
 	extern "C" {
 #endif
 
-#define DALLOC_VERSION                      "1.2.0"
+#define DALLOC_VERSION                      "1.3.0"
 
-#define FILL_FREED_MEMORY_BY_NULLS          false
+#define FILL_FREED_MEMORY_BY_NULLS          true
 #define dalloc_debug                        printf
 #define MAX_NUM_OF_ALLOCATIONS              100UL
 
@@ -35,7 +35,7 @@
 #endif
 
 /* Uncomment "USE_SINGLE_HEAP_MEMORY" define if you want to use only 1 heap memory area */
-#define USE_SINGLE_HEAP_MEMORY
+//#define USE_SINGLE_HEAP_MEMORY
 
 #ifdef USE_SINGLE_HEAP_MEMORY
 #define SINGLE_HEAP_SIZE										4096UL

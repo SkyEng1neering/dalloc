@@ -56,6 +56,11 @@ void heap_init(heap_t* heap_struct_ptr, void *mem_ptr, uint32_t mem_size){//Init
 	heap_struct_ptr->total_size = mem_size;
 	heap_struct_ptr->alloc_info.allocations_num = 0;
 	heap_struct_ptr->alloc_info.max_memory_amount = 0;
+    for(uint32_t i = 0; i < MAX_NUM_OF_ALLOCATIONS; i++){
+        heap_struct_ptr->alloc_info.ptr_info_arr[i].ptr = NULL;
+        heap_struct_ptr->alloc_info.ptr_info_arr[i].allocated_size = 0;
+        heap_struct_ptr->alloc_info.ptr_info_arr[i].free_flag = true;
+    }
 	for(uint32_t i = 0; i < heap_struct_ptr->total_size; i++){
 		heap_struct_ptr->mem[i] = 0;
 	}
@@ -90,6 +95,7 @@ void dalloc(heap_t* heap_struct_ptr, uint32_t size, void **ptr){
 		/* Save info about allocated memory */
 		heap_struct_ptr->alloc_info.ptr_info_arr[heap_struct_ptr->alloc_info.allocations_num].ptr = (uint8_t**)ptr;
 		heap_struct_ptr->alloc_info.ptr_info_arr[heap_struct_ptr->alloc_info.allocations_num].allocated_size = size;
+        heap_struct_ptr->alloc_info.ptr_info_arr[heap_struct_ptr->alloc_info.allocations_num].free_flag = false;
 		heap_struct_ptr->alloc_info.allocations_num = heap_struct_ptr->alloc_info.allocations_num + 1;
 
 		if(heap_struct_ptr->offset > heap_struct_ptr->alloc_info.max_memory_amount){
@@ -134,7 +140,113 @@ bool validate_ptr(heap_t* heap_struct_ptr, void **ptr, validate_ptr_condition_t 
 	return false;
 }
 
+bool is_ptr_address_in_heap_area(heap_t* heap_struct_ptr, void **ptr){
+    uint32_t heap_start_area = (uint32_t)(heap_struct_ptr->mem);
+    uint32_t heap_stop_area = (uint32_t)(heap_struct_ptr->mem) + heap_struct_ptr->total_size;
+    if(((uint32_t)ptr >= heap_start_area) && ((uint32_t)ptr <= heap_stop_area)){
+        return true;
+    }
+    return false;
+}
+
+void defrag_memory(heap_t* heap_struct_ptr){
+    for(uint32_t i = 0; i < heap_struct_ptr->alloc_info.allocations_num; i++){
+        if(heap_struct_ptr->alloc_info.ptr_info_arr[i].free_flag == true){
+            /* Optimize memory */
+            uint8_t *start_mem_ptr = *(heap_struct_ptr->alloc_info.ptr_info_arr[i].ptr);
+            uint32_t start_ind = (uint32_t)(start_mem_ptr - heap_struct_ptr->mem);
+
+            /* Set given ptr to NULL */
+            *(heap_struct_ptr->alloc_info.ptr_info_arr[i].ptr) = NULL;
+
+            uint32_t alloc_size = heap_struct_ptr->alloc_info.ptr_info_arr[i].allocated_size;
+#ifdef USE_ALIGNMENT
+            while(alloc_size % ALLOCATION_ALIGNMENT_BYTES != 0){
+                alloc_size += 1;
+            }
+#endif
+            /* Check if ptrs adresses of defragmentated memory are in heap region */
+            for(uint32_t k = i + 1; k < heap_struct_ptr->alloc_info.allocations_num; k++){
+                if(is_ptr_address_in_heap_area(heap_struct_ptr, (void**)heap_struct_ptr->alloc_info.ptr_info_arr[k].ptr)){
+                    if((size_t)heap_struct_ptr->alloc_info.ptr_info_arr[k].ptr > (size_t)(start_mem_ptr)){
+//                        printf("Old ptr val: 0x%08X\n", (size_t)heap_struct_ptr->alloc_info.ptr_info_arr[k].ptr);
+                        heap_struct_ptr->alloc_info.ptr_info_arr[k].ptr = (uint8_t**)((size_t)(heap_struct_ptr->alloc_info.ptr_info_arr[k].ptr) - alloc_size);
+//                        printf("New ptr val: 0x%08X, shifted on: %d\n", (size_t)heap_struct_ptr->alloc_info.ptr_info_arr[k].ptr, alloc_size);
+                    }
+                }
+            }
+
+            /* Defragmentate memory */
+            uint32_t stop_ind = heap_struct_ptr->offset - alloc_size;
+            for(uint32_t k = start_ind; k <= stop_ind; k++){
+                *(heap_struct_ptr->mem + k) = *(heap_struct_ptr->mem + k + alloc_size);
+            }
+
+            /* Reassign pointers */
+            for(uint32_t k = i + 1; k < heap_struct_ptr->alloc_info.allocations_num; k++){
+                *(heap_struct_ptr->alloc_info.ptr_info_arr[k].ptr) -= alloc_size;
+            }
+
+            /* Actualize ptr info array */
+            for(uint32_t k = i; k < heap_struct_ptr->alloc_info.allocations_num - 1; k++){
+                heap_struct_ptr->alloc_info.ptr_info_arr[k] = heap_struct_ptr->alloc_info.ptr_info_arr[k + 1];
+            }
+
+            /* Decrement allocations number */
+            heap_struct_ptr->alloc_info.allocations_num--;
+
+            /* Refresh offset */
+            heap_struct_ptr->offset = heap_struct_ptr->offset - alloc_size;
+
+            /* Fill by 0 all freed memory */
+            if(FILL_FREED_MEMORY_BY_NULLS){
+                for(uint32_t k = 0; k < alloc_size; k++){
+                    heap_struct_ptr->mem[heap_struct_ptr->offset + k] = 0;
+                }
+            }
+        }
+    }
+}
+
 void dfree(heap_t* heap_struct_ptr, void **ptr, validate_ptr_condition_t condition){
+    /* Check if heap_ptr is not assigned */
+    if(heap_struct_ptr == NULL){
+        dalloc_debug("Heap pointer is not assigned\n");
+        return;
+    }
+
+    uint32_t ptr_index = 0;
+
+    /* Try to find given ptr in ptr_info array */
+    if(validate_ptr(heap_struct_ptr, ptr, condition, &ptr_index) != true){
+        dalloc_debug("Try to free unexisting pointer\n");
+        return;
+    }
+
+    uint32_t alloc_size = heap_struct_ptr->alloc_info.ptr_info_arr[ptr_index].allocated_size;
+#ifdef USE_ALIGNMENT
+    while(alloc_size % ALLOCATION_ALIGNMENT_BYTES != 0){
+        alloc_size += 1;
+    }
+#endif
+
+    /* Edit ptr info array */
+    heap_struct_ptr->alloc_info.ptr_info_arr[ptr_index].free_flag = true;
+#ifdef FILL_FREED_MEMORY_BY_NULLS
+    for(uint32_t i = 0; i < alloc_size; i++){
+        *(*(heap_struct_ptr->alloc_info.ptr_info_arr[ptr_index].ptr) + i) = 0;
+    }
+#endif
+
+//    /* Set given ptr to NULL */
+//    if(condition == USING_PTR_ADDRESS){
+//        *ptr = NULL;
+//    }
+
+    defrag_memory(heap_struct_ptr);
+}
+
+void _dfree(heap_t* heap_struct_ptr, void **ptr, validate_ptr_condition_t condition){
 	uint32_t ptr_index = 0;
 
 	/* Try to find given ptr in ptr_info array */

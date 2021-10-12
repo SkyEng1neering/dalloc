@@ -40,6 +40,7 @@ typedef enum {
 typedef struct {
 	uint8_t **ptr;
 	uint32_t allocated_size;
+    bool free_flag;
 } ptr_info_t;
 
 typedef struct {

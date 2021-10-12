@@ -23,7 +23,6 @@
 
 #include "dalloc_types.h"
 
-
 #ifdef USE_SINGLE_HEAP_MEMORY
 extern heap_t default_heap;
 
