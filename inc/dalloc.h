@@ -25,6 +25,7 @@
 
 #ifdef USE_SINGLE_HEAP_MEMORY
 extern heap_t default_heap;
+extern uint8_t single_heap[];
 
 void def_dalloc(uint32_t size, void **ptr);
 void def_dfree(void **ptr);

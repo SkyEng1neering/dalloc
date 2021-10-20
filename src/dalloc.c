@@ -17,7 +17,9 @@
 #include "dalloc.h"
 
 #ifdef USE_SINGLE_HEAP_MEMORY
-uint8_t single_heap[SINGLE_HEAP_SIZE] = {0};
+/* define single_heap array somewhere in your code, like on the example below:
+              uint8_t single_heap[SINGLE_HEAP_SIZE] = {0};
+*/
 heap_t default_heap;
 bool memory_init_flag = false;
 
@@ -141,9 +143,9 @@ bool validate_ptr(heap_t* heap_struct_ptr, void **ptr, validate_ptr_condition_t 
 }
 
 bool is_ptr_address_in_heap_area(heap_t* heap_struct_ptr, void **ptr){
-    uint32_t heap_start_area = (uint32_t)(heap_struct_ptr->mem);
-    uint32_t heap_stop_area = (uint32_t)(heap_struct_ptr->mem) + heap_struct_ptr->total_size;
-    if(((uint32_t)ptr >= heap_start_area) && ((uint32_t)ptr <= heap_stop_area)){
+    size_t heap_start_area = (size_t)(heap_struct_ptr->mem);
+    size_t heap_stop_area = (size_t)(heap_struct_ptr->mem) + heap_struct_ptr->total_size;
+    if(((size_t)ptr >= heap_start_area) && ((size_t)ptr <= heap_stop_area)){
         return true;
     }
     return false;
@@ -169,9 +171,7 @@ void defrag_memory(heap_t* heap_struct_ptr){
             for(uint32_t k = i + 1; k < heap_struct_ptr->alloc_info.allocations_num; k++){
                 if(is_ptr_address_in_heap_area(heap_struct_ptr, (void**)heap_struct_ptr->alloc_info.ptr_info_arr[k].ptr)){
                     if((size_t)heap_struct_ptr->alloc_info.ptr_info_arr[k].ptr > (size_t)(start_mem_ptr)){
-//                        printf("Old ptr val: 0x%08X\n", (size_t)heap_struct_ptr->alloc_info.ptr_info_arr[k].ptr);
                         heap_struct_ptr->alloc_info.ptr_info_arr[k].ptr = (uint8_t**)((size_t)(heap_struct_ptr->alloc_info.ptr_info_arr[k].ptr) - alloc_size);
-//                        printf("New ptr val: 0x%08X, shifted on: %d\n", (size_t)heap_struct_ptr->alloc_info.ptr_info_arr[k].ptr, alloc_size);
                     }
                 }
             }

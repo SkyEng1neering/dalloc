@@ -35,7 +35,7 @@
 #endif
 
 /* Uncomment "USE_SINGLE_HEAP_MEMORY" define if you want to use only 1 heap memory area */
-//#define USE_SINGLE_HEAP_MEMORY
+#define USE_SINGLE_HEAP_MEMORY
 
 #ifdef USE_SINGLE_HEAP_MEMORY
 #define SINGLE_HEAP_SIZE										4096UL

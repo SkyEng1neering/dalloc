@@ -9,6 +9,8 @@
 
 #define HEAP_SIZE			32
 
+uint8_t single_heap[SINGLE_HEAP_SIZE] = {0};
+
 uint8_t heap_array[HEAP_SIZE];
 heap_t heap;
 
