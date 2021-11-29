@@ -38,7 +38,7 @@
 #define USE_SINGLE_HEAP_MEMORY
 
 #ifdef USE_SINGLE_HEAP_MEMORY
-#define SINGLE_HEAP_SIZE										4096UL
+#define SINGLE_HEAP_SIZE										(64UL*1024UL)
 #endif
 
 #ifdef __cplusplus
