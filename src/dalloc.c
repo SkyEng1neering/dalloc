@@ -349,7 +349,7 @@ void dump_heap(heap_t* heap_struct_ptr){
 void dump_dalloc_ptr_info(heap_t* heap_struct_ptr){
 	dalloc_debug("\n***************************** Ptr Info *****************************\n");
 	for(uint32_t i = 0; i < heap_struct_ptr->alloc_info.allocations_num; i++){
-		dalloc_debug("Ptr address: 0x%08lX, ptr first val: 0x%02X, alloc size: %lu\n", (size_t)(heap_struct_ptr->alloc_info.ptr_info_arr[i].ptr), (uint8_t)(**heap_struct_ptr->alloc_info.ptr_info_arr[i].ptr), (long unsigned int)heap_struct_ptr->alloc_info.ptr_info_arr[i].allocated_size);
+		dalloc_debug("Ptr address: 0x%08X, ptr first val: 0x%02X, alloc size: %lu\n", (size_t)(heap_struct_ptr->alloc_info.ptr_info_arr[i].ptr), (uint8_t)(**heap_struct_ptr->alloc_info.ptr_info_arr[i].ptr), (long unsigned int)heap_struct_ptr->alloc_info.ptr_info_arr[i].allocated_size);
 	}
 	dalloc_debug("\n********************************************************************\n\n");
 }
