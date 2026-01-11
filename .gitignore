@@ -1,0 +1,37 @@
+# Build directories
+build/
+tests/build/
+
+# Object files
+*.o
+*.obj
+
+# Executables
+*.exe
+*.out
+example
+dalloc_tests
+dalloc_thread_tests
+
+# Libraries
+*.a
+*.so
+*.dylib
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile.cmake
+compile_commands.json
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db

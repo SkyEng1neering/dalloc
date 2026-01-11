@@ -1,108 +1,189 @@
 /*
- * example.cpp
+ * example.c - dalloc usage examples
  *
- *  Created on: Sep 24, 2021
- *      Author: SkyEngineering
+ * This file demonstrates both Multi-Heap and Single-Heap APIs.
+ * Compile with: gcc -I./inc example.c src/dalloc.c -o example
+ *
+ * For Single Heap API, compile with:
+ *   gcc -DUSE_SINGLE_HEAP_MEMORY -I./inc example.c src/dalloc.c -o example
  */
 
+#include <stdio.h>
+#include <string.h>
+#include <stdint.h>
 #include "dalloc.h"
 
-#define HEAP_SIZE			32
+/* ============================================================================
+ * Multi-Heap API Example
+ * ============================================================================ */
 
-uint8_t single_heap[SINGLE_HEAP_SIZE] = {0};
+#define HEAP_SIZE  256
 
-uint8_t heap_array[HEAP_SIZE];
-heap_t heap;
+/* Heap buffer - must be aligned! */
+__attribute__((aligned(4)))
+static uint8_t heap_buffer[HEAP_SIZE];
 
-int main(){
-	/* Init heap memory */
-	heap_init(&heap, (void*)heap_array, HEAP_SIZE);
+void multi_heap_example(void) {
+    heap_t heap;
 
-	/* Allocate memory region in heap memory */
-	uint8_t *first_data_ptr = NULL;
-	uint32_t first_allocation_size = 8;
-	dalloc(&heap, first_allocation_size, (void**)&first_data_ptr);
+    printf("=== Multi-Heap API Example ===\n\n");
 
-	/* Check if allocation is successful */
-	if(first_data_ptr == NULL){
-		printf("Can't allocate %u bytes\n", first_allocation_size);
-		return 0;
-	}
+    /* Initialize heap */
+    heap_init(&heap, heap_buffer, HEAP_SIZE);
 
-	printf("Memory allocated successfully, allocated %u bytes\n", first_allocation_size);
+    /* Allocate first block */
+    uint8_t *block1 = NULL;
+    dalloc(&heap, 32, (void**)&block1);
 
-	/* Print info about all allocations in given heap memory */
-	print_dalloc_info(&heap);
-	dump_heap(&heap);
-	dump_dalloc_ptr_info(&heap);
+    if (block1 == NULL) {
+        printf("Allocation failed!\n");
+        return;
+    }
 
-	/* Fill first allocated region by test values */
-	printf("Fill first allocated region by test values\n");
-	memset(first_data_ptr, 0x1, first_allocation_size);
+    printf("Allocated 32 bytes at %p\n", (void*)block1);
+    memset(block1, 0xAA, 32);
 
-	/* Print info about all allocations in given heap memory */
-	print_dalloc_info(&heap);
-	dump_heap(&heap);
-	dump_dalloc_ptr_info(&heap);
+    /* Allocate second block */
+    uint8_t *block2 = NULL;
+    dalloc(&heap, 64, (void**)&block2);
 
-	/* Reallocate first memory region */
-	printf("Reallocate first memory region\n");
-	uint32_t new_size_for_first_allocation = 11;
-	if(drealloc(&heap, new_size_for_first_allocation, (void**)&first_data_ptr) != true){
-		printf("Memory reallocation error, can't allocate %u bytes\n", new_size_for_first_allocation);
-	}
+    if (block2 == NULL) {
+        printf("Allocation failed!\n");
+        dfree(&heap, (void**)&block1, USING_PTR_ADDRESS);
+        return;
+    }
 
-	printf("Memory reallocated successfully, allocated %u bytes\n", new_size_for_first_allocation);
+    printf("Allocated 64 bytes at %p\n", (void*)block2);
+    memset(block2, 0xBB, 64);
 
-	/* Print info about all allocations in given heap memory */
-	print_dalloc_info(&heap);
-	dump_heap(&heap);
-	dump_dalloc_ptr_info(&heap);
+    /* Print heap info */
+    print_dalloc_info(&heap);
 
-	/* Allocate second memory region in heap memory */
-	uint8_t *second_data_ptr = NULL;
-	uint32_t second_allocation_size = 5;
-	dalloc(&heap, second_allocation_size, (void**)&second_data_ptr);
+    /* Free first block - triggers defragmentation */
+    printf("\nFreeing first block (defragmentation will occur)...\n");
+    dfree(&heap, (void**)&block1, USING_PTR_ADDRESS);
 
-	/* Check if allocation is successful */
-	if(second_data_ptr == NULL){
-		printf("Can't allocate %u bytes\n", second_allocation_size);
-		return 0;
-	}
+    /* block2 pointer was automatically updated! */
+    printf("block2 moved to %p after defragmentation\n", (void*)block2);
 
-	printf("Memory allocated successfully, allocated %u bytes\n", second_allocation_size);
+    /* Verify data integrity */
+    int data_ok = 1;
+    for (int i = 0; i < 64; i++) {
+        if (block2[i] != 0xBB) {
+            data_ok = 0;
+            break;
+        }
+    }
+    printf("Data integrity after defrag: %s\n", data_ok ? "OK" : "FAILED");
 
-	/* Print info about all allocations in given heap memory */
-	print_dalloc_info(&heap);
-	dump_heap(&heap);
-	dump_dalloc_ptr_info(&heap);
+    /* Reallocate block2 to larger size */
+    printf("\nReallocating block2 from 64 to 128 bytes...\n");
+    if (drealloc(&heap, 128, (void**)&block2)) {
+        printf("Reallocation successful, new address: %p\n", (void*)block2);
+    }
 
-	/* Fill second allocated region by test values */
-	printf("Fill second allocated region by test values\n");
-	memset(second_data_ptr, 0x2, second_allocation_size);
+    /* Cleanup */
+    dfree(&heap, (void**)&block2, USING_PTR_ADDRESS);
+    heap_deinit(&heap);
 
-	/* Print info about all allocations in given heap memory */
-	print_dalloc_info(&heap);
-	dump_heap(&heap);
-	dump_dalloc_ptr_info(&heap);
+    printf("\nHeap deinitialized.\n");
+}
 
-	/* Free first memory region */
-	printf("Free first memory region\n");
-	dfree(&heap, (void**)&first_data_ptr, USING_PTR_ADDRESS);
+/* ============================================================================
+ * Single-Heap API Example (requires USE_SINGLE_HEAP_MEMORY)
+ * ============================================================================ */
 
-	/* Print info about all allocations in given heap memory */
-	print_dalloc_info(&heap);
-	dump_heap(&heap);
-	dump_dalloc_ptr_info(&heap);
+#ifdef USE_SINGLE_HEAP_MEMORY
 
-	/* Free second memory region */
-	printf("Free second memory region\n");
-	dfree(&heap, (void**)&second_data_ptr, USING_PTR_ADDRESS);
+#define DEFAULT_HEAP_SIZE  512
 
-	/* Print info about all allocations in given heap memory */
-	print_dalloc_info(&heap);
-	dump_heap(&heap);
-	dump_dalloc_ptr_info(&heap);
+__attribute__((aligned(4)))
+static uint8_t default_heap_buffer[DEFAULT_HEAP_SIZE];
 
-	return 0;
+void single_heap_example(void) {
+    printf("\n=== Single-Heap API Example ===\n\n");
+
+    /* Register heap buffer */
+    if (!dalloc_register_heap(default_heap_buffer, DEFAULT_HEAP_SIZE)) {
+        printf("Failed to register heap!\n");
+        return;
+    }
+
+    printf("Heap registered: %u bytes\n", DEFAULT_HEAP_SIZE);
+
+    /* Allocate using simplified API */
+    uint8_t *data = NULL;
+    def_dalloc(100, (void**)&data);
+
+    if (data == NULL) {
+        printf("Allocation failed!\n");
+        dalloc_unregister_heap(true);
+        return;
+    }
+
+    printf("Allocated 100 bytes at %p\n", (void*)data);
+
+    /* Fill with pattern */
+    for (int i = 0; i < 100; i++) {
+        data[i] = (uint8_t)i;
+    }
+
+    /* Reallocate */
+    if (def_drealloc(200, (void**)&data)) {
+        printf("Reallocated to 200 bytes at %p\n", (void*)data);
+
+        /* Verify original data preserved */
+        int ok = 1;
+        for (int i = 0; i < 100; i++) {
+            if (data[i] != (uint8_t)i) {
+                ok = 0;
+                break;
+            }
+        }
+        printf("Original data preserved: %s\n", ok ? "OK" : "FAILED");
+    }
+
+    /* Check heap state */
+    heap_t *heap = dalloc_get_default_heap();
+    if (heap) {
+        printf("\nHeap state:\n");
+        printf("  Used: %lu / %lu bytes\n",
+               (unsigned long)heap->offset,
+               (unsigned long)heap->total_size);
+        printf("  Allocations: %lu\n",
+               (unsigned long)heap->alloc_info.allocations_num);
+    }
+
+    /* Free memory */
+    def_dfree((void**)&data);
+    printf("\nMemory freed, data pointer is now: %p\n", (void*)data);
+
+    /* Unregister heap */
+    if (dalloc_unregister_heap(false)) {
+        printf("Heap unregistered successfully.\n");
+    }
+}
+
+#endif /* USE_SINGLE_HEAP_MEMORY */
+
+/* ============================================================================
+ * Main
+ * ============================================================================ */
+
+int main(void) {
+    printf("dalloc v%s - Example Program\n", DALLOC_VERSION);
+    printf("========================================\n\n");
+
+    /* Multi-heap example always available */
+    multi_heap_example();
+
+#ifdef USE_SINGLE_HEAP_MEMORY
+    /* Single-heap example only when enabled */
+    single_heap_example();
+#else
+    printf("\n(Single-Heap API not enabled. Compile with -DUSE_SINGLE_HEAP_MEMORY)\n");
+#endif
+
+    printf("\nDone.\n");
+    return 0;
 }
