@@ -1,158 +1,374 @@
-# About the project
-This is the custom implementation of function malloc for embedded systems, that defragmentate memory after using it. Good solution when you need to allocate memory dynamically, but memory fragmentation is the problem. On this allocator based such project as [uvector](https://github.com/SkyEng1neering/uvector), [ustring](https://github.com/SkyEng1neering/ustring) and [usmartpointer](https://github.com/SkyEng1neering/usmartpointer).
+# dalloc - Defragmenting Memory Allocator
 
-## What is the problem that [dalloc](https://github.com/SkyEng1neering/dalloc) solves?
-### Here is an illustration of memory fragmentation problem, while using default malloc function:    
-![this](https://github.com/SkyEng1neering/files/blob/main/default_malloc.drawio%20(1).png)
-On the last step there are 7 kB of free memory but not in solid region, so allocating of 4 kB fails
-<br></br>
+Version: 1.5.0
 
-### And how dalloc works:
-![this](https://github.com/SkyEng1neering/files/blob/main/defrag_malloc.drawio.png)
+A custom memory allocator for embedded systems with automatic defragmentation. Unlike standard malloc, dalloc tracks pointer addresses and can move allocations during defragmentation, updating all affected pointers automatically.
 
-## How it works
-When you call allocate function, it saves the pointer to the pointer of allocated memory area and when corresponding memory region is freed - the defragmentation procedure executes, an the content of pointer to the memory area is replaced by new actual value. So using of dalloc allocator is not the same as default malloc.
+Libraries built on dalloc: [uvector](https://github.com/SkyEng1neering/uvector), [ustring](https://github.com/SkyEng1neering/ustring), [usmartpointer](https://github.com/SkyEng1neering/usmartpointer).
 
-# Usage
-## Simple examples of using dalloc
-In your project you can use only one heap area, and several heap areas as well. 
-If you want to use only one heap memory area in your project, you can do it like this:
-```c++
-/* File dalloc_conf.h */
+## The Problem dalloc Solves
+
+### Standard malloc - fragmentation issue:
+![malloc fragmentation](https://github.com/SkyEng1neering/files/blob/main/default_malloc.drawio%20(1).png)
+
+On the last step there are 7 kB free but not contiguous, so allocating 4 kB fails.
+
+### dalloc - automatic defragmentation:
+![dalloc defragmentation](https://github.com/SkyEng1neering/files/blob/main/defrag_malloc.drawio.png)
+
+## How It Works
+
+dalloc saves the **address of the pointer** (not just its value). When memory is freed, defragmentation runs automatically and updates all affected pointers to their new locations.
+
+**Important:** This means the pointer variable must remain valid until `dfree()` is called.
+
+## Quick Start
+
+### Option 1: Single Global Heap (Recommended for simple projects)
+
+```c
+#include "dalloc.h"
+
+// Place buffer in specific memory section if needed
+__attribute__((aligned(4)))  // Ensure 4-byte alignment!
+static uint8_t heap_buffer[4096];
+
+int main() {
+    // Register the heap buffer (must be called before any allocation)
+    if (!dalloc_register_heap(heap_buffer, sizeof(heap_buffer))) {
+        return -1;  // Registration failed
+    }
+
+    // Allocate memory
+    uint8_t *data = NULL;
+    def_dalloc(64, (void**)&data);
+
+    if (data == NULL) {
+        return -1;  // Allocation failed
+    }
+
+    // Use allocated memory
+    for (int i = 0; i < 64; i++) {
+        data[i] = i;
+    }
+
+    // Free memory (data becomes NULL)
+    def_dfree((void**)&data);
+
+    return 0;
+}
+```
+
+### Option 2: Multiple Heaps (Explicit API)
+
+```c
+#include "dalloc.h"
+
+__attribute__((aligned(4)))
+static uint8_t buffer1[2048];
+static uint8_t buffer2[2048];
+
+heap_t heap_fast;  // For frequently accessed data
+heap_t heap_slow;  // For less critical data
+
+int main() {
+    heap_init(&heap_fast, buffer1, sizeof(buffer1));
+    heap_init(&heap_slow, buffer2, sizeof(buffer2));
+
+    // Allocate from specific heap
+    uint8_t *critical_data = NULL;
+    dalloc(&heap_fast, 256, (void**)&critical_data);
+
+    uint8_t *temp_data = NULL;
+    dalloc(&heap_slow, 512, (void**)&temp_data);
+
+    // Use memory...
+
+    // Free when done
+    dfree(&heap_fast, (void**)&critical_data, USING_PTR_ADDRESS);
+    dfree(&heap_slow, (void**)&temp_data, USING_PTR_ADDRESS);
+
+    // Cleanup heaps
+    heap_deinit(&heap_fast);
+    heap_deinit(&heap_slow);
+
+    return 0;
+}
+```
+
+## Examples
+
+### Reallocation
+
+```c
+uint8_t *buffer = NULL;
+def_dalloc(32, (void**)&buffer);
+
+// Fill with data
+for (int i = 0; i < 32; i++) {
+    buffer[i] = i;
+}
+
+// Grow the buffer - data is preserved
+if (def_drealloc(64, (void**)&buffer)) {
+    // buffer now has 64 bytes, first 32 contain original data
+    buffer[32] = 0xFF;  // Use new space
+}
+
+def_dfree((void**)&buffer);
+```
+
+### Transferring Pointer Ownership
+
+When you need to move an allocation to a different pointer variable:
+
+```c
+uint8_t *temp_ptr = NULL;
+def_dalloc(64, (void**)&temp_ptr);
+
+// Work with temp_ptr...
+temp_ptr[0] = 0x42;
+
+// Transfer to permanent storage
+uint8_t *permanent_ptr = NULL;
+def_replace_pointers((void**)&temp_ptr, (void**)&permanent_ptr);
+// Now: temp_ptr == NULL, permanent_ptr points to the memory
+
+// Later...
+def_dfree((void**)&permanent_ptr);
+```
+
+### Bulk Reset (Clear All Allocations)
+
+```c
+// Array of pointers - must persist until free/reset
+uint8_t *objects[100];
+
+// Allocate many objects
+for (int i = 0; i < 100; i++) {
+    objects[i] = NULL;
+    def_dalloc(16, (void**)&objects[i]);
+    if (objects[i]) {
+        objects[i][0] = i;  // Use allocated memory
+    }
+}
+
+// Instead of freeing each one, reset the entire heap
+dalloc_reset_heap();
+// All allocations are cleared, heap is empty
+// WARNING: All pointers in objects[] are now invalid!
+```
+
+### Checking Heap State
+
+```c
+if (!dalloc_is_initialized()) {
+    dalloc_register_heap(buffer, sizeof(buffer));
+}
+
+heap_t *heap = dalloc_get_default_heap();
+if (heap != NULL) {
+    printf("Used: %lu / %lu bytes\n",
+           (unsigned long)heap->offset,
+           (unsigned long)heap->total_size);
+    printf("Allocations: %lu\n",
+           (unsigned long)heap->alloc_info.allocations_num);
+}
+```
+
+### ESP32/STM32: Using Specific Memory Regions
+
+```c
+// ESP32: Use IRAM for fast access
+__attribute__((section(".iram1")))
+static uint8_t fast_heap[4096];
+
+// STM32: Use CCM RAM
+__attribute__((section(".ccmram")))
+static uint8_t ccm_heap[8192];
+
+// External SRAM (if available)
+__attribute__((section(".sdram")))
+static uint8_t large_heap[65536];
+
+void init_heaps(void) {
+    dalloc_register_heap(fast_heap, sizeof(fast_heap));
+}
+```
+
+## API Reference
+
+### Single Heap API (USE_SINGLE_HEAP_MEMORY)
+
+| Function | Description |
+|----------|-------------|
+| `dalloc_register_heap(buffer, size)` | Register user buffer as default heap |
+| `dalloc_unregister_heap(force)` | Unregister heap. If `force=false`, fails when allocations exist |
+| `dalloc_reset_heap()` | Clear all allocations, reinitialize heap |
+| `dalloc_is_initialized()` | Check if heap is registered |
+| `dalloc_get_default_heap()` | Get pointer to heap_t structure |
+| `def_dalloc(size, &ptr)` | Allocate memory |
+| `def_dfree(&ptr)` | Free memory |
+| `def_drealloc(size, &ptr)` | Reallocate memory |
+| `def_replace_pointers(&old, &new)` | Transfer allocation to new pointer |
+
+### Multi-Heap API
+
+| Function | Description |
+|----------|-------------|
+| `heap_init(heap, buffer, size)` | Initialize heap with buffer |
+| `heap_deinit(heap)` | Deinitialize heap, release resources |
+| `dalloc(heap, size, &ptr)` | Allocate from specific heap |
+| `dfree(heap, &ptr, condition)` | Free from specific heap |
+| `drealloc(heap, size, &ptr)` | Reallocate in specific heap |
+| `replace_pointers(heap, &old, &new)` | Transfer allocation |
+| `validate_ptr(heap, &ptr, condition, &index)` | Check if pointer is valid |
+
+### Debug Functions
+
+| Function | Description |
+|----------|-------------|
+| `print_dalloc_info(heap)` / `print_def_dalloc_info()` | Print heap statistics |
+| `dump_heap(heap)` / `dump_def_heap()` | Hex dump of heap memory |
+| `dump_dalloc_ptr_info(heap)` / `dump_def_dalloc_ptr_info()` | Print allocation details |
+
+## Configuration
+
+You can override default settings without modifying `dalloc_conf.h`:
+
+### Method 1: Compiler flags
+```bash
+gcc -DMAX_NUM_OF_ALLOCATIONS=200 -DUSE_SINGLE_HEAP_MEMORY ...
+```
+
+### Method 2: Custom config file
+```bash
+gcc -DDALLOC_CUSTOM_CONF_FILE=\"my_dalloc_conf.h\" ...
+```
+
+```c
+// my_dalloc_conf.h - only override what you need
+#define MAX_NUM_OF_ALLOCATIONS      50
 #define USE_SINGLE_HEAP_MEMORY
-#define SINGLE_HEAP_SIZE				4096UL //define heap size that you want to have
+#define dalloc_debug(...)           // disable debug output
 ```
 
-```c++
-#include "dalloc.h"
+### Configuration Options
 
-int main(){
-  /* Allocate memory region in heap memory */
-  uint8_t *data_ptr = NULL;
-  uint32_t allocation_size = 8;
-  def_dalloc(allocation_size, (void**)&data_ptr);
+| Option | Default | Description |
+|--------|---------|-------------|
+| `MAX_NUM_OF_ALLOCATIONS` | 100 | Maximum simultaneous allocations |
+| `USE_ALIGNMENT` | defined | Enable pointer alignment |
+| `ALLOCATION_ALIGNMENT_BYTES` | 4 | Alignment boundary (typically 4 for ARM) |
+| `FILL_FREED_MEMORY_BY_NULLS` | true | Zero memory on free (security) |
+| `USE_SINGLE_HEAP_MEMORY` | undefined | Enable single heap mode |
+| `USE_THREAD_SAFETY` | undefined | Enable thread-safe operations |
+| `USE_FREE_RTOS` | undefined | Use FreeRTOS mutex primitives |
+| `dalloc_debug` | printf | Debug output function |
 
-  /* Check if allocation is successful */
-  if(data_ptr == NULL){
-    printf("Can't allocate %u bytes\n", allocation_size);
-    return 0;
-  }
- 
-  /* Now you can use allocated memory */
-  for(uint32_t i = 0; i < allocation_size; i++){
-    data_ptr[i] = 0xDE;
-  }
- 
-  /* Free allocated memory */
-  def_dfree((void**)&data_ptr);
- 
-  return 0;
-}  
-  
+## Thread Safety
+
+dalloc supports optional thread safety via `USE_THREAD_SAFETY`. Each heap has its own mutex for protection.
+
+### FreeRTOS (Easiest)
+
+```c
+// my_dalloc_conf.h
+#define USE_THREAD_SAFETY
+#define USE_FREE_RTOS
 ```
 
-If you want to use several different heap areas, you can define it explicitly:
+dalloc will automatically use `xSemaphoreCreateMutex()`, `xSemaphoreTake()`, `xSemaphoreGive()`.
 
-```c++
-/* File dalloc_conf.h */
-//#define USE_SINGLE_HEAP_MEMORY
+### POSIX Threads
+
+```c
+// my_dalloc_conf.h
+#define USE_THREAD_SAFETY
+
+#include <pthread.h>
+#include <stdlib.h>
+
+#define DALLOC_MUTEX_TYPE           pthread_mutex_t*
+
+#define DALLOC_MUTEX_CREATE()       ({ \
+    pthread_mutex_t *m = malloc(sizeof(pthread_mutex_t)); \
+    if (m) pthread_mutex_init(m, NULL); \
+    m; \
+})
+
+#define DALLOC_MUTEX_DELETE(mutex)  do { \
+    if (mutex) { pthread_mutex_destroy(mutex); free(mutex); } \
+} while(0)
+
+#define DALLOC_MUTEX_LOCK(mutex)    do { if (mutex) pthread_mutex_lock(mutex); } while(0)
+#define DALLOC_MUTEX_UNLOCK(mutex)  do { if (mutex) pthread_mutex_unlock(mutex); } while(0)
 ```
 
-```c++
-#include "dalloc.h"
+### Required Mutex Macros
 
-#define HEAP_SIZE			32
+| Macro | Description |
+|-------|-------------|
+| `DALLOC_MUTEX_TYPE` | The mutex handle type |
+| `DALLOC_MUTEX_CREATE()` | Create and return a mutex handle |
+| `DALLOC_MUTEX_DELETE(mutex)` | Delete/destroy the mutex |
+| `DALLOC_MUTEX_LOCK(mutex)` | Acquire the mutex (blocking) |
+| `DALLOC_MUTEX_UNLOCK(mutex)` | Release the mutex |
 
-/* Declare an array that will be used for dynamic memory allocations */
-uint8_t heap_array[HEAP_SIZE];
+## Important Limitations
 
-/* Declare an dalloc heap structure, it contains all allocations info */
-heap_t heap;
+### Buffer Alignment
 
-int main(){
-  /* Init heap memory */
-  heap_init(&heap, (void*)heap_array, HEAP_SIZE);
+The heap buffer **must be aligned** to `ALLOCATION_ALIGNMENT_BYTES` (default: 4 bytes):
 
-  /* Allocate memory region in heap memory */
-  uint8_t *data_ptr = NULL;
-  uint32_t allocation_size = 8;
-  dalloc(&heap, allocation_size, (void**)&data_ptr);
+```c
+// CORRECT - explicitly aligned
+__attribute__((aligned(4)))
+static uint8_t heap_buffer[4096];
 
-  /* Check if allocation is successful */
-  if(data_ptr == NULL){
-    printf("Can't allocate %u bytes\n", allocation_size);
-    return 0;
-  }
- 
-  /* Now you can use allocated memory */
-  for(uint32_t i = 0; i < allocation_size; i++){
-    data_ptr[i] = 0xDE;
-  }
- 
-  /* Free allocated memory */
-  dfree(&heap, (void**)&data_ptr, USING_PTR_ADDRESS);
- 
-  return 0;
-}  
-  
+// ALSO OK - naturally aligned on most systems
+static uint32_t heap_buffer_u32[1024];  // 4096 bytes, 4-byte aligned
+static uint8_t *heap_buffer = (uint8_t*)heap_buffer_u32;
 ```
-## Limitations
-As the address of pointer variable being saved and the value of the pointer variable is being updated when defragmentation is running - the pointer that was passed to **dalloc** function must exist before dfree function call, so you **can't** do something like this:
 
-```c++
-uint8_t* func_that_use_dalloc(heap_t *heap_ptr, uint32_t some_data_len){
-  uint8_t* data_ptr = NULL;
-  dalloc(heap, some_data_len, (void**)&data_ptr);
-  return data_ptr;
+### Pointer Lifetime
+
+The pointer **variable** passed to `dalloc()` must remain in scope until `dfree()` is called (dalloc stores the address of the variable, not just its value):
+
+```c
+// WRONG - data_ptr is destroyed when function returns
+uint8_t* bad_function(heap_t *heap) {
+    uint8_t* data_ptr = NULL;
+    dalloc(heap, 64, (void**)&data_ptr);
+    return data_ptr;  // BUG: &data_ptr becomes invalid!
 }
-```
-Because when you call this function - the memory is allocated, but after this the pointer variable **data_ptr** which address that saves in heap_t structure isn't exist. So when you call **dfree** function, when defragmentation start you can get hard fault exception.
 
-So the pointer which contains allocated memory address should exist in memory after allocating procedure. You can do this for example:
-
-```c++
-uint8_t* data_ptr = NULL;//data_ptr is just global variable
-
-bool func_that_use_dalloc(heap_t *heap_ptr, uint32_t some_data_len){
-  dalloc(heap, some_data_len, (void**)&data_ptr);
-  
-  /* Check if allocation is successful */
-  if(data_ptr == NULL){
-    return false;
-  }
-  return true;
+// CORRECT - use pointer from caller's scope
+bool good_function(heap_t *heap, uint8_t **data_ptr) {
+    dalloc(heap, 64, (void**)data_ptr);
+    return (*data_ptr != NULL);
 }
 ```
 
-Or this:
+### Memory Overhead
 
-```c++
-uint8_t* data_ptr = NULL;//data_ptr is the variable somewhere in your code
+Each allocation uses:
+- Actual data (aligned to `ALLOCATION_ALIGNMENT_BYTES`)
+- Entry in `ptr_info_arr` array (12 bytes per allocation on 32-bit systems)
 
-bool func_that_use_dalloc(heap_t *heap_ptr, uint8_t** data_ptr_address, uint32_t some_data_len){
-  dalloc(heap, some_data_len, (void**)data_ptr_address);
-  
-  /* Check if allocation is successful */
-  if(*data_ptr_address == NULL){
-    return false;
-  }
-  return true;
-}
+For many small allocations, consider using a dedicated pool allocator instead.
 
-func_that_use_dalloc(&heap, &data_ptr, some_data_len);
+## Building Tests
+
+```bash
+cd tests
+mkdir build && cd build
+cmake ..
+make -j$(nproc)
+./dalloc_tests           # 85 tests
+./dalloc_thread_tests    # 7 thread safety tests (Linux only)
 ```
 
-### If you need to allocate memory in some function, and return pointer to allocated memory from it - just use [usmartpointer](https://github.com/SkyEng1neering/usmartpointer), this is an c++ wrapper for dalloc, and you can use it more comfortable:
+## License
 
-```c++
-SmartPointer<uint8_t> func_that_use_dalloc(heap_t *heap_ptr, uint32_t some_data_len){
-  SmartPointer<uint8_t> ptr;
-  ptr.assignAllocMemPointer(heap_ptr);
-  ptr.allocate(some_data_len);
-  
-  /* Maybe some logic */
-  
-  return ptr;
-}
-```
-All memory moments here is managed automatically
+Apache License 2.0 - See [LICENSE](LICENSE) file.
