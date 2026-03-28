@@ -17,7 +17,13 @@
 
 #define DALLOC_MUTEX_CREATE()       ({ \
     pthread_mutex_t *m = (pthread_mutex_t*)malloc(sizeof(pthread_mutex_t)); \
-    if (m) pthread_mutex_init(m, NULL); \
+    if (m) { \
+        pthread_mutexattr_t attr; \
+        pthread_mutexattr_init(&attr); \
+        pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE); \
+        pthread_mutex_init(m, &attr); \
+        pthread_mutexattr_destroy(&attr); \
+    } \
     m; \
 })
 

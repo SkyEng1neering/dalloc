@@ -191,9 +191,42 @@ bool def_drealloc(uint32_t size, void **ptr);
 void def_replace_pointers(void **ptr_to_replace, void **ptr_new);
 
 /**
+ * @brief Lock the default heap for composite operations
+ *
+ * Acquires the heap mutex so that multiple dalloc/dfree/replace_pointers
+ * calls execute atomically. The mutex is recursive, so nested locking
+ * (from the individual dalloc calls inside the locked region) is safe.
+ *
+ * @note No-op when USE_THREAD_SAFETY is not defined
+ * @note Must be paired with def_heap_unlock()
+ */
+void def_heap_lock(void);
+
+/**
+ * @brief Unlock the default heap after composite operations
+ *
+ * @note No-op when USE_THREAD_SAFETY is not defined
+ * @note Must be paired with def_heap_lock()
+ */
+void def_heap_unlock(void);
+
+/**
  * @brief Print default heap statistics to debug output
  */
 void print_def_dalloc_info(void);
+
+/**
+ * @brief Write default heap statistics into a user-provided buffer
+ *
+ * Writes a null-terminated string with heap usage info into buf.
+ * Uses dalloc_snprintf (configurable via dalloc_conf.h).
+ *
+ * @param buf      Destination buffer
+ * @param buf_size Size of buffer in bytes
+ * @return Number of characters written (excluding null terminator),
+ *         or -1 if buf is NULL or buf_size is 0
+ */
+int def_dalloc_heap_info_str(char *buf, uint32_t buf_size);
 
 /**
  * @brief Dump default heap memory contents to debug output
@@ -337,6 +370,28 @@ bool validate_ptr(heap_t *heap_struct_ptr, void **ptr,
 void replace_pointers(heap_t *heap_struct_ptr, void **ptr_to_replace, void **ptr_new);
 
 /**
+ * @brief Lock heap mutex for composite operations
+ *
+ * Acquires the heap mutex so that multiple dalloc/dfree/replace_pointers
+ * calls execute atomically. The mutex is recursive, so nested locking
+ * (from the individual dalloc calls inside the locked region) is safe.
+ *
+ * @param heap_struct_ptr Pointer to heap structure
+ * @note No-op when USE_THREAD_SAFETY is not defined
+ * @note Must be paired with heap_unlock()
+ */
+void heap_lock(heap_t *heap_struct_ptr);
+
+/**
+ * @brief Unlock heap mutex after composite operations
+ *
+ * @param heap_struct_ptr Pointer to heap structure
+ * @note No-op when USE_THREAD_SAFETY is not defined
+ * @note Must be paired with heap_lock()
+ */
+void heap_unlock(heap_t *heap_struct_ptr);
+
+/**
  * @brief Print heap statistics to debug output
  *
  * Outputs: total size, used bytes, allocation count, peak usage.
@@ -344,6 +399,20 @@ void replace_pointers(heap_t *heap_struct_ptr, void **ptr_to_replace, void **ptr
  * @param heap_struct_ptr Pointer to heap structure
  */
 void print_dalloc_info(heap_t *heap_struct_ptr);
+
+/**
+ * @brief Write heap statistics into a user-provided buffer
+ *
+ * Writes a null-terminated string with heap usage info into buf.
+ * Uses dalloc_snprintf (configurable via dalloc_conf.h).
+ *
+ * @param heap_struct_ptr Pointer to heap structure
+ * @param buf             Destination buffer
+ * @param buf_size        Size of buffer in bytes
+ * @return Number of characters written (excluding null terminator),
+ *         or -1 if any pointer is NULL or buf_size is 0
+ */
+int dalloc_heap_info_str(heap_t *heap_struct_ptr, char *buf, uint32_t buf_size);
 
 /**
  * @brief Dump heap memory contents to debug output

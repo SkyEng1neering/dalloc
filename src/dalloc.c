@@ -113,12 +113,34 @@ bool def_drealloc(uint32_t size, void **ptr){
 	return drealloc(&default_heap, size, ptr);
 }
 
+void def_heap_lock(void){
+	if(!heap_registered){
+		return;
+	}
+	heap_lock(&default_heap);
+}
+
+void def_heap_unlock(void){
+	if(!heap_registered){
+		return;
+	}
+	heap_unlock(&default_heap);
+}
+
 void print_def_dalloc_info(void){
 	if(!heap_registered){
 		dalloc_debug("print_def_dalloc_info: Heap not registered\n");
 		return;
 	}
 	print_dalloc_info(&default_heap);
+}
+
+int def_dalloc_heap_info_str(char *buf, uint32_t buf_size){
+	if(!heap_registered){
+		if(buf && buf_size > 0) buf[0] = '\0';
+		return -1;
+	}
+	return dalloc_heap_info_str(&default_heap, buf, buf_size);
 }
 
 void dump_def_heap(void){
@@ -304,8 +326,13 @@ void defrag_memory(heap_t* heap_struct_ptr){
 #ifdef USE_ALIGNMENT
             alloc_size = DALLOC_ALIGN_UP(alloc_size);
 #endif
-            /* Check if ptrs adresses of defragmentated memory are in heap region */
-            for(uint32_t k = i + 1; k < heap_struct_ptr->alloc_info.allocations_num; k++){
+            /* Adjust ptr ADDRESSES that fall inside the moved heap region.
+             * Must scan ALL entries (not just k > i): an earlier alloc_info entry
+             * can have its tracking variable relocated into a later heap buffer
+             * via replace_pointers, so its .ptr address may be above start_mem_ptr
+             * even when k < i. Skip only the freed entry itself (k == i). */
+            for(uint32_t k = 0; k < heap_struct_ptr->alloc_info.allocations_num; k++){
+                if(k == i) continue;
                 if(is_ptr_address_in_heap_area(heap_struct_ptr, (void**)heap_struct_ptr->alloc_info.ptr_info_arr[k].ptr)){
                     if((size_t)heap_struct_ptr->alloc_info.ptr_info_arr[k].ptr > (size_t)(start_mem_ptr)){
                         heap_struct_ptr->alloc_info.ptr_info_arr[k].ptr = (uint8_t**)((size_t)(heap_struct_ptr->alloc_info.ptr_info_arr[k].ptr) - alloc_size);
@@ -319,9 +346,17 @@ void defrag_memory(heap_t* heap_struct_ptr){
                     heap_struct_ptr->mem + start_ind + alloc_size,
                     bytes_to_move);
 
-            /* Reassign pointers */
-            for(uint32_t k = i + 1; k < heap_struct_ptr->alloc_info.allocations_num; k++){
-                *(heap_struct_ptr->alloc_info.ptr_info_arr[k].ptr) -= alloc_size;
+            /* Reassign pointer VALUES that point into the moved region.
+             * Must scan ALL entries (not just k > i): after replace_pointers
+             * and prior defrag cycles, an earlier alloc_info entry can hold a
+             * value that points above start_mem_ptr even when k < i.
+             * Skip only the freed entry itself (k == i) — its ptr was set to
+             * NULL above and must not be dereferenced. */
+            for(uint32_t k = 0; k < heap_struct_ptr->alloc_info.allocations_num; k++){
+                if(k == i) continue;
+                if(*(heap_struct_ptr->alloc_info.ptr_info_arr[k].ptr) > start_mem_ptr){
+                    *(heap_struct_ptr->alloc_info.ptr_info_arr[k].ptr) -= alloc_size;
+                }
             }
 
             /* Actualize ptr info array */
@@ -420,6 +455,26 @@ void replace_pointers(heap_t* heap_struct_ptr, void **ptr_to_replace, void **ptr
 #endif
 }
 
+void heap_lock(heap_t *heap_struct_ptr){
+#ifdef USE_THREAD_SAFETY
+	if(heap_struct_ptr){
+		DALLOC_MUTEX_LOCK(heap_struct_ptr->mutex);
+	}
+#else
+	(void)heap_struct_ptr;
+#endif
+}
+
+void heap_unlock(heap_t *heap_struct_ptr){
+#ifdef USE_THREAD_SAFETY
+	if(heap_struct_ptr){
+		DALLOC_MUTEX_UNLOCK(heap_struct_ptr->mutex);
+	}
+#else
+	(void)heap_struct_ptr;
+#endif
+}
+
 bool drealloc(heap_t* heap_struct_ptr, uint32_t size, void **ptr){
 	if(!heap_struct_ptr || !ptr){
 		return false;
@@ -491,6 +546,28 @@ void print_dalloc_info(heap_t* heap_struct_ptr){
 #ifdef USE_THREAD_SAFETY
 	DALLOC_MUTEX_UNLOCK(heap_struct_ptr->mutex);
 #endif
+}
+
+int dalloc_heap_info_str(heap_t* heap_struct_ptr, char *buf, uint32_t buf_size){
+	if(!heap_struct_ptr || !buf || buf_size == 0){
+		if(buf && buf_size > 0) buf[0] = '\0';
+		return -1;
+	}
+#ifdef USE_THREAD_SAFETY
+	DALLOC_MUTEX_LOCK(heap_struct_ptr->mutex);
+#endif
+	int n = dalloc_snprintf(buf, buf_size,
+		"used=%lu/%lu allocs=%lu peak_mem=%lu peak_allocs=%lu",
+		(unsigned long)heap_struct_ptr->offset,
+		(unsigned long)heap_struct_ptr->total_size,
+		(unsigned long)heap_struct_ptr->alloc_info.allocations_num,
+		(unsigned long)heap_struct_ptr->alloc_info.max_memory_amount,
+		(unsigned long)heap_struct_ptr->alloc_info.max_allocations_amount);
+#ifdef USE_THREAD_SAFETY
+	DALLOC_MUTEX_UNLOCK(heap_struct_ptr->mutex);
+#endif
+	buf[buf_size - 1] = '\0';
+	return n;
 }
 
 void dump_heap(heap_t* heap_struct_ptr){

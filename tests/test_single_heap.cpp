@@ -303,6 +303,53 @@ TEST_F(SingleHeapTest, DefReplacePointers_Registered_Success) {
     EXPECT_EQ(ptr2, original_value);
 }
 
+// ==================== Heap Info String Tests ====================
+
+TEST_F(SingleHeapTest, DefHeapInfoStr_Success) {
+    dalloc_register_heap(buffer, BUFFER_SIZE);
+
+    uint8_t* ptr = nullptr;
+    def_dalloc(64, reinterpret_cast<void**>(&ptr));
+    ASSERT_NE(ptr, nullptr);
+
+    char buf[128];
+    int n = def_dalloc_heap_info_str(buf, sizeof(buf));
+
+    EXPECT_GT(n, 0);
+    EXPECT_NE(std::strstr(buf, "allocs=1"), nullptr);
+    // Check total size is present
+    char expected[32];
+    std::snprintf(expected, sizeof(expected), "/%lu", (unsigned long)BUFFER_SIZE);
+    EXPECT_NE(std::strstr(buf, expected), nullptr);
+
+    def_dfree(reinterpret_cast<void**>(&ptr));
+}
+
+TEST_F(SingleHeapTest, DefHeapInfoStr_NotRegistered_ReturnsError) {
+    EXPECT_FALSE(dalloc_is_initialized());
+
+    char buf[128] = "garbage";
+    int n = def_dalloc_heap_info_str(buf, sizeof(buf));
+
+    EXPECT_EQ(n, -1);
+    EXPECT_EQ(buf[0], '\0');
+}
+
+TEST_F(SingleHeapTest, DefHeapInfoStr_NullBuf_ReturnsError) {
+    dalloc_register_heap(buffer, BUFFER_SIZE);
+
+    int n = def_dalloc_heap_info_str(nullptr, 128);
+    EXPECT_EQ(n, -1);
+}
+
+TEST_F(SingleHeapTest, DefHeapInfoStr_ZeroBufSize_ReturnsError) {
+    dalloc_register_heap(buffer, BUFFER_SIZE);
+
+    char buf[1];
+    int n = def_dalloc_heap_info_str(buf, 0);
+    EXPECT_EQ(n, -1);
+}
+
 // ==================== Full Workflow Tests ====================
 
 TEST_F(SingleHeapTest, FullWorkflow_RegisterAllocFreeUnregister) {
@@ -352,6 +399,134 @@ TEST_F(SingleHeapTest, FullWorkflow_MultipleAllocationsAndReset) {
     uint8_t* new_ptr = nullptr;
     def_dalloc(64, reinterpret_cast<void**>(&new_ptr));
     EXPECT_NE(new_ptr, nullptr);
+}
+
+// ==================== Stress Tests for Single Heap ====================
+
+class SingleHeapStressTest : public ::testing::Test {
+protected:
+    static constexpr size_t BUFFER_SIZE = 4096;
+    uint8_t buffer[BUFFER_SIZE];
+
+    void SetUp() override {
+        dalloc_unregister_heap(true);
+        std::memset(buffer, 0xAA, BUFFER_SIZE);
+        dalloc_register_heap(buffer, BUFFER_SIZE);
+    }
+
+    void TearDown() override {
+        dalloc_unregister_heap(true);
+    }
+};
+
+TEST_F(SingleHeapStressTest, Stress_RapidAllocFree) {
+    for (int i = 0; i < 100; i++) {
+        uint8_t* ptr = nullptr;
+        def_dalloc(32, reinterpret_cast<void**>(&ptr));
+        ASSERT_NE(ptr, nullptr) << "Allocation failed at iteration " << i;
+
+        ptr[0] = static_cast<uint8_t>(i);
+        ptr[31] = static_cast<uint8_t>(i);
+
+        def_dfree(reinterpret_cast<void**>(&ptr));
+        EXPECT_EQ(ptr, nullptr);
+    }
+
+    heap_t* heap = dalloc_get_default_heap();
+    EXPECT_EQ(heap->alloc_info.allocations_num, 0u);
+    EXPECT_EQ(heap->offset, 0u);
+}
+
+TEST_F(SingleHeapStressTest, Stress_MultiplePointersDefrag) {
+    for (int cycle = 0; cycle < 50; cycle++) {
+        uint8_t* ptr1 = nullptr;
+        uint8_t* ptr2 = nullptr;
+        uint8_t* ptr3 = nullptr;
+
+        def_dalloc(64, reinterpret_cast<void**>(&ptr1));
+        def_dalloc(64, reinterpret_cast<void**>(&ptr2));
+        def_dalloc(64, reinterpret_cast<void**>(&ptr3));
+
+        ASSERT_NE(ptr1, nullptr);
+        ASSERT_NE(ptr2, nullptr);
+        ASSERT_NE(ptr3, nullptr);
+
+        ptr1[0] = 0x11;
+        ptr2[0] = 0x22;
+        ptr3[0] = 0x33;
+
+        // Free middle - triggers defrag
+        def_dfree(reinterpret_cast<void**>(&ptr1));
+
+        // Verify data preserved after defrag
+        EXPECT_EQ(ptr2[0], 0x22) << "Data corruption at cycle " << cycle;
+        EXPECT_EQ(ptr3[0], 0x33) << "Data corruption at cycle " << cycle;
+
+        def_dfree(reinterpret_cast<void**>(&ptr2));
+        def_dfree(reinterpret_cast<void**>(&ptr3));
+    }
+}
+
+TEST_F(SingleHeapStressTest, Stress_AlternatingPattern) {
+    uint8_t* ptrs[20] = {nullptr};
+
+    for (int round = 0; round < 20; round++) {
+        // Allocate all
+        for (int i = 0; i < 20; i++) {
+            def_dalloc(32, reinterpret_cast<void**>(&ptrs[i]));
+            if (ptrs[i] != nullptr) {
+                ptrs[i][0] = static_cast<uint8_t>(i);
+            }
+        }
+
+        // Free alternating
+        for (int i = 0; i < 20; i += 2) {
+            if (ptrs[i] != nullptr) {
+                def_dfree(reinterpret_cast<void**>(&ptrs[i]));
+            }
+        }
+
+        // Verify remaining
+        for (int i = 1; i < 20; i += 2) {
+            if (ptrs[i] != nullptr) {
+                EXPECT_EQ(ptrs[i][0], static_cast<uint8_t>(i))
+                    << "Corruption at round " << round << " ptr " << i;
+            }
+        }
+
+        // Free rest
+        for (int i = 1; i < 20; i += 2) {
+            if (ptrs[i] != nullptr) {
+                def_dfree(reinterpret_cast<void**>(&ptrs[i]));
+            }
+        }
+
+        // Reset array
+        std::memset(ptrs, 0, sizeof(ptrs));
+    }
+}
+
+TEST_F(SingleHeapStressTest, Stress_ReregisterHeap) {
+    // This tests the scenario from usmart_ptr tests:
+    // unregister and reregister heap between operations
+
+    for (int cycle = 0; cycle < 20; cycle++) {
+        uint8_t* ptr = nullptr;
+        def_dalloc(64, reinterpret_cast<void**>(&ptr));
+        ASSERT_NE(ptr, nullptr);
+
+        ptr[0] = static_cast<uint8_t>(cycle);
+        def_dfree(reinterpret_cast<void**>(&ptr));
+
+        // Unregister and reregister (simulates test fixture SetUp/TearDown)
+        dalloc_unregister_heap(true);
+        std::memset(buffer, 0xBB, BUFFER_SIZE);
+        dalloc_register_heap(buffer, BUFFER_SIZE);
+    }
+
+    heap_t* heap = dalloc_get_default_heap();
+    EXPECT_NE(heap, nullptr);
+    EXPECT_EQ(heap->alloc_info.allocations_num, 0u);
 }
 
 #endif // USE_SINGLE_HEAP_MEMORY

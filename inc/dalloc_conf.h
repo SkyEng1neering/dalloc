@@ -61,7 +61,7 @@
 /* ==================== Default Configuration ==================== */
 
 #ifndef DALLOC_VERSION
-#define DALLOC_VERSION                      "1.5.0"
+#define DALLOC_VERSION                      "1.5.1"
 #endif
 
 /* Fill freed memory with zeros for security/debugging */
@@ -72,6 +72,11 @@
 /* Debug output function (set to empty macro to disable) */
 #ifndef dalloc_debug
 #define dalloc_debug                        printf
+#endif
+
+/* snprintf-like function for dalloc_heap_info_str() */
+#ifndef dalloc_snprintf
+#define dalloc_snprintf                     snprintf
 #endif
 
 /* Maximum number of simultaneous allocations */
@@ -157,7 +162,7 @@
 	#endif
 
 	#ifndef DALLOC_MUTEX_CREATE
-	#define DALLOC_MUTEX_CREATE()           xSemaphoreCreateMutex()
+	#define DALLOC_MUTEX_CREATE()           xSemaphoreCreateRecursiveMutex()
 	#endif
 
 	#ifndef DALLOC_MUTEX_DELETE
@@ -165,11 +170,11 @@
 	#endif
 
 	#ifndef DALLOC_MUTEX_LOCK
-	#define DALLOC_MUTEX_LOCK(mutex)        do { if(mutex) xSemaphoreTake(mutex, portMAX_DELAY); } while(0)
+	#define DALLOC_MUTEX_LOCK(mutex)        do { if(mutex) xSemaphoreTakeRecursive(mutex, portMAX_DELAY); } while(0)
 	#endif
 
 	#ifndef DALLOC_MUTEX_UNLOCK
-	#define DALLOC_MUTEX_UNLOCK(mutex)      do { if(mutex) xSemaphoreGive(mutex); } while(0)
+	#define DALLOC_MUTEX_UNLOCK(mutex)      do { if(mutex) xSemaphoreGiveRecursive(mutex); } while(0)
 	#endif
 
 #else /* Custom OS - user must define mutex macros */

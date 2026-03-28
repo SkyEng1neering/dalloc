@@ -139,6 +139,59 @@ TEST_F(BasicTest, Free_InvalidPtr_NoOp) {
     EXPECT_EQ(heap.alloc_info.allocations_num, 1u);
 }
 
+// ==================== Heap Info String Tests ====================
+
+TEST_F(BasicTest, HeapInfoStr_EmptyHeap) {
+    char buf[128];
+    int n = dalloc_heap_info_str(&heap, buf, sizeof(buf));
+
+    EXPECT_GT(n, 0);
+    EXPECT_NE(std::strstr(buf, "used=0/"), nullptr);
+    EXPECT_NE(std::strstr(buf, "allocs=0"), nullptr);
+}
+
+TEST_F(BasicTest, HeapInfoStr_AfterAllocations) {
+    uint8_t* ptr1 = nullptr;
+    uint8_t* ptr2 = nullptr;
+    dalloc(&heap, 64, reinterpret_cast<void**>(&ptr1));
+    dalloc(&heap, 32, reinterpret_cast<void**>(&ptr2));
+
+    char buf[128];
+    int n = dalloc_heap_info_str(&heap, buf, sizeof(buf));
+
+    EXPECT_GT(n, 0);
+    EXPECT_NE(std::strstr(buf, "allocs=2"), nullptr);
+    // offset must be > 0 after allocations
+    EXPECT_EQ(std::strstr(buf, "used=0/"), nullptr);
+}
+
+TEST_F(BasicTest, HeapInfoStr_NullBuf_ReturnsError) {
+    int n = dalloc_heap_info_str(&heap, nullptr, 128);
+    EXPECT_EQ(n, -1);
+}
+
+TEST_F(BasicTest, HeapInfoStr_ZeroBufSize_ReturnsError) {
+    char buf[1];
+    int n = dalloc_heap_info_str(&heap, buf, 0);
+    EXPECT_EQ(n, -1);
+}
+
+TEST_F(BasicTest, HeapInfoStr_NullHeap_ReturnsError) {
+    char buf[128];
+    int n = dalloc_heap_info_str(nullptr, buf, sizeof(buf));
+    EXPECT_EQ(n, -1);
+    EXPECT_EQ(buf[0], '\0');
+}
+
+TEST_F(BasicTest, HeapInfoStr_SmallBuf_Truncated) {
+    char buf[16];
+    int n = dalloc_heap_info_str(&heap, buf, sizeof(buf));
+
+    // Should still be null-terminated
+    EXPECT_EQ(buf[sizeof(buf) - 1], '\0');
+    EXPECT_GT(n, 0);
+}
+
 // Test that allocated memory is usable
 TEST_F(BasicTest, AllocatedMemory_IsUsable) {
     uint8_t* ptr = nullptr;
